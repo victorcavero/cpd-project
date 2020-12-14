@@ -116,7 +116,7 @@ void calc_force(
 		double &);
 
 #if 1
-void calc_force(
+void calc_force( // 34*nj*ni*P
 		int ni, 
 		int nj, 
 		double eps2,
@@ -128,11 +128,11 @@ void calc_force(
 		double &){
 	t1 = wtime();
 #pragma omp parallel for
-	for(int i=0; i<ni; i++){
+	for(int i=0; i<ni; i++){ 											
 		double ax=0, ay=0, az=0;
 		double jx=0, jy=0, jz=0;
 		double pot=0;
-		for(int j=0; j<nj; j++){
+		for(int j=0; j<nj; j++){       
 			double dx = jpred[j].pos.x - ipred[i].pos.x;
 			double dy = jpred[j].pos.y - ipred[i].pos.y;
 			double dz = jpred[j].pos.z - ipred[i].pos.z;

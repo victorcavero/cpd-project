@@ -1,13 +1,5 @@
-/*                               			*/
-/* phi-GPU ver 3.0 with MPI & multi-GPU support :-) 	*/
-/*                               			*/
-/* - eta_BBH - added             			*/
-/* - phi-GPU4, 6, 8                   			*/
-/*                               			*/
-/*                               			*/
-/* 10.07.2009 19:12 	 				*/
-/*                               			*/
 
+#include <mpi.h>
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -17,27 +9,14 @@
 #include <sys/resource.h>
 #include <utility>
 #include <algorithm>
-#include <mpi.h>
 
-#define FOURTH 1
-#ifdef FOURTH
-#  ifdef GPU
-#    include "hermite4-gpu.h"
-#  else
+
+#ifdef FOURTH 
 #    include "hermite4.h"
-#  endif
 #elif defined SIXTH
-#  ifdef GPU
-#    include "hermite6-gpu.h"
-#  else
 #    include "hermite6.h"
-#  endif
 #elif defined EIGHTH
-#  ifdef GPU
-#    include "hermite8-gpu.h"
-#  else
 #    include "hermite8.h"
-#  endif
 #else
 #  error
 #endif
@@ -48,27 +27,15 @@
 
 static Particle ptcl[N_MAX];
 static Jparticle jptcl[N_MAX];
-#if 0
-std::pair<int, double> t_plus_dt[N_MAX];
-template <class T, class S>
-struct cmp_pair_second{
-	bool operator () (const std::pair<T,S> &p0, const std::pair<T,S> &p1){
-		return (p0.second < p1.second);
-	}
-};
-#else
+
 std::pair<double, int> t_plus_dt[N_MAX];
-#endif
+
 
 // static double t_plus_dt[N_MAX];
 
 // static Predictor jpred[N_MAX_loc], ipred[N_MAX];
 
-#if 0
-static Predictor *jpred = Predictor::allocate(N_MAX_loc);
-static Predictor *ipred = Predictor::allocate(N_MAX);
-#else
-#endif
+
 static Force force_tmp[N_MAX], force[N_MAX];
 static int active_list[N_MAX];
 
@@ -142,45 +109,15 @@ static void outputsnap(){
 	fclose(out);
 }
 
-/*
-static void outputsnap_BH()
-{
-  FILE *out = fopen("bh.dat","a");
-
-  assert(out);
-
-  fprintf(out,"%.8E \n", time_cur);
-
-  int i = 0;
-  Particle &p = ptcl[i];
-  fprintf(out,"%06d  %.8E  % .8E % .8E % .8E  % .8E % .8E % .8E \n", 
-	p.id, p.mass, p.pos[0], p.pos[1], p.pos[2], p.vel[0], p.vel[1], p.vel[2]);
-
-  i = 1;
-  p = ptcl[i];
-  fprintf(out,"%06d  %.8E  % .8E % .8E % .8E  % .8E % .8E % .8E \n", 
-	p.id, p.mass, p.pos[0], p.pos[1], p.pos[2], p.vel[0], p.vel[1], p.vel[2]);
-
-  fprintf(out,"\n");
-
-  fclose(out);
-}
-*/
 
 static void energy(int myRank){
 	static bool init_call = true;
 	static double einit;
 
-#ifdef GPU
-	static double pot_tmp[N_MAX], pot[N_MAX];
-	potential(nbody, jstart, jend, eps2, ptcl, pot_tmp);
-	MPI_Allreduce(pot_tmp, pot, nbody, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	double E_pot = 0.0;
-	for(int i=0; i<nbody; i++) E_pot += ptcl[i].mass * pot[i];
-#else
+
 	double E_pot = 0.0;
 	for(int i=0; i<nbody; i++) E_pot += ptcl[i].mass * ptcl[i].pot;
-#endif
+
 	E_pot *= 0.5;
 
 	double E_kin = 0.0;
@@ -241,38 +178,6 @@ static void energy(int myRank){
 		fclose(out);
 	}
 
-/*
-	if(myRank == 0){
-
-		FILE *out = fopen("bh.dat","a");
-		assert(out);
-
-		  fprintf(out,"%.10E \n", time_cur);
-
-		  fprintf(out,"%06d \t %.6E \t % .10E % .10E % .10E \t % .10E % .10E % .10E \t % .10E \t % .10E % .10E % .10E \t % .10E % .10E % .10E \n", 
-			0, 
-			ptcl[0].mass, 
-			ptcl[0].pos[0], ptcl[0].pos[1], ptcl[0].pos[2], 
-			ptcl[0].vel[0], ptcl[0].vel[1], ptcl[0].vel[2], 
-			pot[0], 
-			ptcl[0].acc[0], ptcl[0].acc[1], ptcl[0].acc[2], 
-			ptcl[0].jrk[0], ptcl[0].jrk[1], ptcl[0].jrk[2]);
-
-		  fprintf(out,"%06d \t %.6E \t % .10E % .10E % .10E \t % .10E % .10E % .10E \t % .10E \t % .10E % .10E % .10E \t % .10E % .10E % .10E \n", 
-			1, 
-			ptcl[1].mass, 
-			ptcl[1].pos[0], ptcl[1].pos[1], ptcl[1].pos[2], 
-			ptcl[1].vel[0], ptcl[1].vel[1], ptcl[1].vel[2], 
-			pot[1], 
-			ptcl[1].acc[0], ptcl[1].acc[1], ptcl[1].acc[2], 
-			ptcl[1].jrk[0], ptcl[1].jrk[1], ptcl[1].jrk[2]);
-
-
-		  fprintf(out,"\n");
-
-		fclose(out);
-	}
-*/
 
 #ifdef CMCORR
 	for(int i=0; i<nbody; i++)
@@ -403,19 +308,8 @@ int main(int argc, char *argv[]){
 	double t_contr = time_cur + dt_contr;
 
 	MPI_Barrier(MPI_COMM_WORLD);
-#if 1
+
 	MPI_Bcast(ptcl, nbody*sizeof(Particle), MPI_CHAR, 0, MPI_COMM_WORLD);
-#else
-	if(myRank == 0){
-		for(int p=1; p<n_proc; p++){
-			MPI_Send(ptcl, nbody*sizeof(Particle), MPI_CHAR, p, 0, MPI_COMM_WORLD);
-			fprintf(stderr, ".");
-		}
-		fprintf(stderr, "\n");
-	}else{
-		MPI_Recv(ptcl, nbody*sizeof(Particle), MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-	}
-#endif
 
 	jstart = (myRank * nbody) / n_proc; 
 	jend   = ((1+myRank) * nbody) / n_proc; 
@@ -445,12 +339,6 @@ int main(int argc, char *argv[]){
 
 			ptcl[i].init(time_cur, dt_min, dt_max, eta, force[i]);
 
-/*
-      if( (i == 0) || (i == 1) ) 	
-        ptcl[i].init(time_cur, dt_min, dt_max, eta_BH, force[i]);
-      else      		       		
-        ptcl[i].init(time_cur, dt_min, dt_max, eta, force[i]);
-*/
 
 			// t_plus_dt[i] = ptcl[i].t + ptcl[i].dt;	
 			t_plus_dt[i].first = ptcl[i].t + ptcl[i].dt;	
@@ -468,17 +356,6 @@ int main(int argc, char *argv[]){
 		fprintf(stdout, "Initialized, %f Gflops\n", Gflops);
 	}
 
-#if 0
-	if(myRank == 0){
-		for(int i=0; i<nbody; i++){
-			std::cout << force[i].acc << " "
-				      << force[i].jrk << " "
-				      << force[i].snp << " "
-					  << std::endl;
-		}
-	}
-	exit(0);
-#endif
 
 	energy(myRank);
 	if(myRank == 0){
@@ -488,80 +365,32 @@ int main(int argc, char *argv[]){
 
 	while(time_cur <= t_end){
 		double t0 = wtime();
-#if 0
-		double min_t = t_plus_dt[0];
-		// for(int i=0; i<nbody; i++) min_t = std::min(min_t, t_plus_dt[i]);
-		for(int i=0; i<nbody; i++) min_t = min_t < t_plus_dt[i] ? min_t : t_plus_dt[i];
-		int n_act = 0;
-		for(int i=0; i<nbody; i++){
-			if(t_plus_dt[i] == min_t) active_list[n_act++] = i;
-		}
-#else
+
 		double min_t = t_plus_dt[0].first;
 		int n_act = 0;
 		while(t_plus_dt[n_act].first == min_t){
 			active_list[n_act] = t_plus_dt[n_act].second;
 			n_act++;
 		}
-#endif
 
-//		fprintf(stderr, "%16.6e %4d\n", time_cur, n_act);
-//		fprintf(stderr, "%16.6e %4d\n", min_t, n_act);
 
 		double t1 = wtime();
 
 #pragma omp parallel for
-#if 0
-		for(int j=0; j<nj; j++){
-			Taylor <double, dvec3> taylor;
-			ptcl[j+jstart+1].prefetch();
-			const Particle &p = ptcl[j+jstart];
-			Predictor &pr = jpred[j];
-			double dt = min_t - p.t;
-			dvec3 dpos = taylor(dt, p.pos, p.vel, p.acc, p.jrk, p.snp, p.crk);
-			dvec3 dvel = taylor(dt,        p.vel, p.acc, p.jrk, p.snp, p.crk);
-			dvec3 dacc = taylor(dt,               p.acc, p.jrk, p.snp, p.crk);
-			pr.pos[0] = float2_split <20> (dpos.x);
-			pr.pos[1] = float2_split <20> (dpos.y);
-			pr.pos[2] = float2_split <20> (dpos.z);
-			pr.vel[0] = dvel.x;
-			pr.vel[1] = dvel.y;
-			pr.vel[2] = dvel.z;
-			pr.acc[0] = dacc.x;
-			pr.acc[1] = dacc.y;
-			pr.acc[2] = dacc.z;
-			pr.mass = p.mass;
-		}
-#else
+
 		for(int j=0; j<nj; j++){
 			// ptcl[j+jstart+1].prefetch();
 			jptcl[j+jstart+1].prefetch();
-		   	// jpred[j] = Predictor(min_t, ptcl[j+jstart]);
-		   	// jpred[j] = Predictor(min_t, Jparticle(ptcl[j+jstart]));
-
-#ifdef GPU
-		   	Predictor(min_t, jptcl[j+jstart]).store(&jpred[j]);
-#else
 		   	jpred[j] = Predictor(min_t, jptcl[j+jstart]);
-#endif
+
 		}
-#endif
+
 		int ni = n_act;
 
 #pragma omp parallel for
 		for(int i=0; i<ni; i++){
-			// ipred[i] = Predictor(min_t, ptcl[active_list[i]]);
-#if 0
-			ptcl[active_list[i+1]].prefetch();
-			ipred[i] = Predictor(min_t, Jparticle(ptcl[active_list[i]]));
-#else
 			jptcl[active_list[i+1]].prefetch();
-#ifdef GPU
-			Predictor(min_t, jptcl[active_list[i]]).store(&ipred[i]);
-#else
 			ipred[i] = Predictor(min_t, jptcl[active_list[i]]);
-#endif
-#endif
 		}
 
 		double t2 = wtime();
@@ -578,23 +407,13 @@ int main(int argc, char *argv[]){
 			Particle &p = ptcl[active_list[i]];
 
 			p.correct(dt_min, dt_max, eta, force[i]);
-/*
-      if( (active_list[i] == 0) || (active_list[i] == 1) ) 
-        p.correct(dt_min, dt_max, eta_BH, force[i]);
-      else 
-        p.correct(dt_min, dt_max, eta, force[i]);
-*/
+
 			// t_plus_dt[active_list[i]] = p.t + p.dt;
 			t_plus_dt[i].second = active_list[i];
 			t_plus_dt[i].first  = p.t + p.dt;
-#if 0
-			int ii = active_list[i];
-			if(jstart<=ii && ii < jend){
-				jptcl[ii] = Jparticle(p);
-			}
-#else
+
 			jptcl[active_list[i]] = Jparticle(p);
-#endif
+
 		}
 
 		double t6 = wtime();
