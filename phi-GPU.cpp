@@ -59,7 +59,7 @@ extern double wtime()
 #else
 extern double wtime()
 {
-	return 0;
+		return 0;
 }
 #endif
 
@@ -171,8 +171,7 @@ static void energy(int myRank){
 
 		fprintf(out,"%.8E  %.8E  %.8E   % .16E % .16E % .16E   % .16E   % .16E % .16E   % .16E % .16E % .16E   %.8E %.8E %.8E \n",
 				time_cur, Timesteps, n_act_sum,
-				E_pot, E_kin, E_pot+E_kin, 
-			eerr, 
+				E_pot, E_kin, E_pot+E_kin, eerr, 
 				rcm_mod, vcm_mod, mom[0], mom[1], mom[2], 
 				CPU_time_real-CPU_time_real0, CPU_time_user-CPU_time_user0, CPU_time_syst-CPU_time_syst0);
 		fclose(out);
@@ -199,10 +198,7 @@ int main(int argc, char *argv[]){
 
         /* Print the Rank and the names of processors */
         printf("Rank of the processor %02d on %s \n", myRank, processor_name);
- 
-#ifdef GPU
-	CUDA_MPI_Init(myRank);
-#endif
+
 
 	Predictor *jpred = Predictor::allocate(N_MAX_loc);
 	Predictor *ipred = Predictor::allocate(N_MAX);
@@ -214,15 +210,15 @@ int main(int argc, char *argv[]){
 	// double time_cur;
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(myRank == 0){
-#ifdef FOURTH
-		std::ifstream ifs("phi-GPU4.cfg");
-#endif
-#ifdef SIXTH
-		std::ifstream ifs("phi-GPU6.cfg");
-#endif
-#ifdef EIGHTH
-		std::ifstream ifs("phi-GPU8.cfg");
-#endif
+		#ifdef FOURTH
+				std::ifstream ifs("phi-GPU4.cfg");
+		#endif
+		#ifdef SIXTH
+				std::ifstream ifs("phi-GPU6.cfg");
+		#endif
+		#ifdef EIGHTH
+				std::ifstream ifs("phi-GPU8.cfg");
+		#endif
 		static char inp_fname[256];
 //		ifs >> eps >>  t_end >>  dt_disk >>  dt_contr >>  eta >> inp_fname;
 		ifs >> eps >>  t_end >>  dt_disk >>  dt_contr >>  eta >> eta_BH >> inp_fname;
@@ -261,15 +257,15 @@ int main(int argc, char *argv[]){
 
 		printf("\n");
 //		printf("Begin the calculation of phi-GPU program on %03d processors\n", n_proc); 
-#ifdef FOURTH
-    printf("Begin the calculation of phi-GPU4 program on %03d processors\n", n_proc); 
-#endif
-#ifdef SIXTH
-    printf("Begin the calculation of phi-GPU6 program on %03d processors\n", n_proc); 
-#endif
-#ifdef EIGHTH
-    printf("Begin the calculation of phi-GPU8 program on %03d processors\n", n_proc); 
-#endif
+		#ifdef FOURTH
+			printf("Begin the calculation of phi-GPU4 program on %03d processors\n", n_proc); 
+		#endif
+		#ifdef SIXTH
+			printf("Begin the calculation of phi-GPU6 program on %03d processors\n", n_proc); 
+		#endif
+		#ifdef EIGHTH
+			printf("Begin the calculation of phi-GPU8 program on %03d processors\n", n_proc); 
+		#endif
 		printf("\n");
 		printf("N       = %06d \t eps      = %.6E \n", nbody, eps);
 		printf("t_beg   = %.6E \t t_end    = %.6E \n", time_cur, t_end);
@@ -323,14 +319,14 @@ int main(int argc, char *argv[]){
 		get_CPU_time(&CPU_time_real0, &CPU_time_user0, &CPU_time_syst0);
 	}
 	for(int l=0; l<Particle::init_iter; l++){
-#pragma omp parallel for
-		for(int j=0; j<nj; j++){
-			jpred[j] = Predictor(time_cur, Jparticle(ptcl[j+jstart]));
-		}
-#pragma omp parallel for
-		for(int i=0; i<ni; i++){
-			ipred[i] = Predictor(time_cur, Jparticle(ptcl[i]));
-		}
+	#pragma omp parallel for schedule(dynamic) shared(jpred, time_cur, jstart, n_loc) private(j) num_threads(2)
+			for(int j=0; j<nj; j++){
+				jpred[j] = Predictor(time_cur, Jparticle(ptcl[j+jstart]));
+			}
+	#pragma omp parallel for schedule(dynamic) shared(ipred, time_cur, nbody) private(i) num_threads(2)
+			for(int i=0; i<ni; i++){
+				ipred[i] = Predictor(time_cur, Jparticle(ptcl[i]));
+			}
 		double dum;
 		calc_force(ni, nj, eps2, ipred, jpred, force_tmp, dum, dum, dum);
 		MPI_Allreduce(force_tmp, force, ni*Force::nword, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -356,11 +352,12 @@ int main(int argc, char *argv[]){
 		fprintf(stdout, "Initialized, %f Gflops\n", Gflops);
 	}
 
-
 	energy(myRank);
+
 	if(myRank == 0){
 		get_CPU_time(&CPU_time_real0, &CPU_time_user0, &CPU_time_syst0);
 	}
+
 	double t_scan = 0.0, t_pred = 0.0, t_jsend = 0.0, t_isend = 0.0, t_force = 0.0, t_recv = 0.0, t_comm = 0.0, t_corr = 0.0;
 
 	while(time_cur <= t_end){
@@ -368,15 +365,15 @@ int main(int argc, char *argv[]){
 
 		double min_t = t_plus_dt[0].first;
 		int n_act = 0;
+
 		while(t_plus_dt[n_act].first == min_t){
 			active_list[n_act] = t_plus_dt[n_act].second;
 			n_act++;
 		}
 
-
 		double t1 = wtime();
 
-#pragma omp parallel for
+		//#pragma omp parallel for
 
 		for(int j=0; j<nj; j++){
 			// ptcl[j+jstart+1].prefetch();
@@ -387,7 +384,7 @@ int main(int argc, char *argv[]){
 
 		int ni = n_act;
 
-#pragma omp parallel for
+		//#pragma omp parallel for
 		for(int i=0; i<ni; i++){
 			jptcl[active_list[i+1]].prefetch();
 			ipred[i] = Predictor(min_t, jptcl[active_list[i]]);
@@ -400,7 +397,7 @@ int main(int argc, char *argv[]){
 		MPI_Allreduce(force_tmp, force, ni*Force::nword, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 		double t5 = wtime();
 
-#pragma omp parallel for
+		//#pragma omp parallel for
 		for(int i=0; i<ni; i++){
 			ptcl[active_list[i+1]].prefetch();
 			// jptcl[active_list[i+1]].prefetch();
@@ -434,9 +431,6 @@ int main(int argc, char *argv[]){
 
 		if(time_cur >= t_contr){
 			energy(myRank);
-			if(myRank == 0){
-//			outputsnap_BH();
-			}
 			t_contr += dt_contr;
 		}
 		if(time_cur >= t_disk){
@@ -446,7 +440,7 @@ int main(int argc, char *argv[]){
 			}
 			t_disk += dt_disk;
 		}
-	} // while(time_cut <= t_end)
+	}
 
 	double g6_calls_sum;
 	MPI_Reduce(&g6_calls, &g6_calls_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -462,7 +456,7 @@ int main(int argc, char *argv[]){
 		// double GflopsT = Particle::flops*1.e-9*nbody*g6_calls*48/(CPU_time_real - CPU_time_real0);
 		printf("Real Speed = %.3f GFlops \n", Gflops);
 
-#ifdef PROFILE
+	#ifdef PROFILE
 		double t_tot = t_scan + t_pred + t_jsend + t_force + t_comm + t_corr;
 		t_force -= t_isend + t_recv;
 		// printf("Time ratio: %10.2E%10.2E%10.2E%10.2E%10.2E\n", t_scan/t_tot, t_pred/t_tot, t_forc/t_tot, t_comm/t_tot, t_corr/t_tot);
@@ -478,8 +472,8 @@ int main(int argc, char *argv[]){
 		printf("tot  :%12.4E%12.4E%12.4E\n", t_tot, t_tot/Timesteps*1.e6, t_tot/t_tot);
 		// double t_comm_avr = t_comm / Timesteps * 1.e6;
 		// printf("Comm time : %10.2E usec\n", t_comm_avr);
-#endif
-                fflush(stdout);
+	#endif
+    	fflush(stdout);
 	}
 
 	MPI_Finalize();
