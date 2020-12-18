@@ -30,12 +30,6 @@ static Jparticle jptcl[N_MAX];
 
 std::pair<double, int> t_plus_dt[N_MAX];
 
-
-// static double t_plus_dt[N_MAX];
-
-// static Predictor jpred[N_MAX_loc], ipred[N_MAX];
-
-
 static Force force_tmp[N_MAX], force[N_MAX];
 static int active_list[N_MAX];
 
@@ -63,7 +57,7 @@ extern double wtime()
 }
 #endif
 
-static void get_CPU_time(double *time_real, double *time_user, double *time_syst) {
+static void get_CPU_time(double *time_real, double *time_user, double *time_syst) {  //6 flops
 	struct rusage xxx;
 	double sec_u, microsec_u, sec_s, microsec_s;
 
@@ -110,18 +104,18 @@ static void outputsnap(){
 }
 
 
-static void energy(int myRank){
+static void energy(int myRank){ // 15 + 12*nbody flops
 	static bool init_call = true;
 	static double einit;
 
 
 	double E_pot = 0.0;
-	for(int i=0; i<nbody; i++) E_pot += ptcl[i].mass * ptcl[i].pot;
+	for(int i=0; i<nbody; i++) E_pot += ptcl[i].mass * ptcl[i].pot;  // 2*nbody flops
 
-	E_pot *= 0.5;
+	E_pot *= 0.5;													// 1 flops
 
 	double E_kin = 0.0;
-	for(int i=0; i<nbody; i++) E_kin += ptcl[i].mass * ptcl[i].vel.norm2();
+	for(int i=0; i<nbody; i++) E_kin += ptcl[i].mass * ptcl[i].vel.norm2();	// 2*nbody flops
 	E_kin *= 0.5;
 
 	assert(E_pot == E_pot);
@@ -130,7 +124,7 @@ static void energy(int myRank){
 	double mcm = 0.0;
 	dvec3 xcm = 0.0;
 	dvec3 vcm = 0.0;
-	for(int i=0; i<nbody; i++){
+	for(int i=0; i<nbody; i++){								// 5*nbody flops
 		mcm += ptcl[i].mass;
 		xcm += ptcl[i].mass * ptcl[i].pos;
 		vcm += ptcl[i].mass * ptcl[i].vel;
@@ -138,24 +132,24 @@ static void energy(int myRank){
 	xcm /= mcm;
 	vcm /= mcm;
 
-	double rcm_mod = xcm.abs();
-	double vcm_mod = vcm.abs();
+	double rcm_mod = xcm.abs();								// 1 flop
+	double vcm_mod = vcm.abs();								// 1 flop
 
 	dvec3 mom = 0.0;
-	for(int i=0; i<nbody; i++) mom += ptcl[i].mass * (ptcl[i].pos % ptcl[i].vel);
+	for(int i=0; i<nbody; i++) mom += ptcl[i].mass * (ptcl[i].pos % ptcl[i].vel); //3*nbody flops
 
-	get_CPU_time(&CPU_time_real, &CPU_time_user, &CPU_time_syst);
+	get_CPU_time(&CPU_time_real, &CPU_time_user, &CPU_time_syst);  //6 flops
 
 
 	if(init_call)
 	  {
-	  einit = E_pot + E_kin;
+	  einit = E_pot + E_kin;							// 1 flops
 	  init_call = false;
   	  }
 
-	double eerr = (E_pot+E_kin-einit)/einit;
+	double eerr = (E_pot+E_kin-einit)/einit;			//3 flops
 	
-        einit = E_pot + E_kin;
+        einit = E_pot + E_kin;							// 2 flops
 	
 
 	if(myRank == 0){
@@ -203,11 +197,8 @@ int main(int argc, char *argv[]){
 	Predictor *jpred = Predictor::allocate(N_MAX_loc);
 	Predictor *ipred = Predictor::allocate(N_MAX);
 
-//	double eps, t_end, dt_disk, dt_contr, eta;
 	double eps, t_end, dt_disk, dt_contr, eta, eta_BH;
 
-	// int diskstep, nbody;
-	// double time_cur;
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(myRank == 0){
 		#ifdef FOURTH
@@ -220,19 +211,16 @@ int main(int argc, char *argv[]){
 				std::ifstream ifs("phi-GPU8.cfg");
 		#endif
 		static char inp_fname[256];
-//		ifs >> eps >>  t_end >>  dt_disk >>  dt_contr >>  eta >> inp_fname;
 		ifs >> eps >>  t_end >>  dt_disk >>  dt_contr >>  eta >> eta_BH >> inp_fname;
 		if(ifs.fail()) MPI_Abort(MPI_COMM_WORLD, -1);
 		std::ifstream inp(inp_fname);
-		// std::cerr << inp_fname << std::endl;
 		inp >> diskstep >> nbody >> time_cur;
-		// std::cerr << diskstep << " " << nbody << " " << time_cur << std::endl;
 		assert(nbody <= N_MAX);
 		assert(nbody/n_proc <= N_MAX_loc);
 		if(inp.fail()) MPI_Abort(MPI_COMM_WORLD, -2);
-		for(int i=0; i<nbody; i++){
+		for(int i=0; i<nbody; i++){                     // 4 * nbody flops * 1
 			Particle &p = ptcl[i];
-			inp >> p.id >> p.mass >> p.pos >> p.vel;
+			inp >> p.id >> p.mass >> p.pos >> p.vel; 
 			p.t = time_cur;
 		}
 		if(inp.fail()) MPI_Abort(MPI_COMM_WORLD, -3);
@@ -256,7 +244,6 @@ int main(int argc, char *argv[]){
 #endif
 
 		printf("\n");
-//		printf("Begin the calculation of phi-GPU program on %03d processors\n", n_proc); 
 		#ifdef FOURTH
 			printf("Begin the calculation of phi-GPU4 program on %03d processors\n", n_proc); 
 		#endif
@@ -270,8 +257,7 @@ int main(int argc, char *argv[]){
 		printf("N       = %06d \t eps      = %.6E \n", nbody, eps);
 		printf("t_beg   = %.6E \t t_end    = %.6E \n", time_cur, t_end);
 		printf("dt_disk = %.6E \t dt_contr = %.6E \n", dt_disk, dt_contr);
-//		printf("eta     = %.6E \n", eta);
-	        printf("eta     = %.6E \t eta_BH   = %.6E \n", eta, eta_BH);
+	    printf("eta     = %.6E \t eta_BH   = %.6E \n", eta, eta_BH);
 		printf("\n"); 
 
 		fflush(stdout);
@@ -280,12 +266,10 @@ int main(int argc, char *argv[]){
 		{
 			outputsnap();
 		}
-		get_CPU_time(&CPU_time_real0, &CPU_time_user0, &CPU_time_syst0);
-    } /* if(myRank == rootRank) */
+		get_CPU_time(&CPU_time_real0, &CPU_time_user0, &CPU_time_syst0); // 6flops * 1
+    } 
 
 	MPI_Barrier(MPI_COMM_WORLD);
-	// std::cerr << "bcast parameters" << std::endl;
-
 	MPI_Bcast(&nbody,    1, MPI_INT,    0, MPI_COMM_WORLD);
 	MPI_Bcast(&eps,      1, MPI_DOUBLE, 0, MPI_COMM_WORLD);  
 	MPI_Bcast(&eta,      1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -295,13 +279,13 @@ int main(int argc, char *argv[]){
 	MPI_Bcast(&dt_contr, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&time_cur, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-	double dt_max = 1. / (1 << 3);
-	while(dt_max >= std::min(dt_disk, dt_contr)) dt_max *= 0.5;
-	double dt_min = 1. / (1 << 23);
+	double dt_max = 1. / (1 << 3);									//2 flops * P
+	while(dt_max >= std::min(dt_disk, dt_contr)) dt_max *= 0.5; 	// 1*flop* P
+	double dt_min = 1. / (1 << 23);									// 2 flops* P
 
 	int n_loc = nbody/n_proc;
-	double t_disk  = time_cur + dt_disk;
-	double t_contr = time_cur + dt_contr;
+	double t_disk  = time_cur + dt_disk;							//1 flop* P
+	double t_contr = time_cur + dt_contr;							// 1 flop* P
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
@@ -312,50 +296,46 @@ int main(int argc, char *argv[]){
 	n_loc = jend - jstart;
 	int nj = n_loc;
 	int ni = nbody;
-	eps2 = eps*eps;
+	eps2 = eps*eps;											// 1 flop * P
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(myRank == 0){
-		get_CPU_time(&CPU_time_real0, &CPU_time_user0, &CPU_time_syst0);
+		get_CPU_time(&CPU_time_real0, &CPU_time_user0, &CPU_time_syst0); // 6flops * 1
 	}
 	for(int l=0; l<Particle::init_iter; l++){
-	#pragma omp parallel for schedule(dynamic) shared(jpred, time_cur, jstart, n_loc) private(j) num_threads(2)
+	#pragma omp parallel for 
 			for(int j=0; j<nj; j++){
 				jpred[j] = Predictor(time_cur, Jparticle(ptcl[j+jstart]));
 			}
-	#pragma omp parallel for schedule(dynamic) shared(ipred, time_cur, nbody) private(i) num_threads(2)
+	#pragma omp parallel for
 			for(int i=0; i<ni; i++){
 				ipred[i] = Predictor(time_cur, Jparticle(ptcl[i]));
 			}
 		double dum;
-		calc_force(ni, nj, eps2, ipred, jpred, force_tmp, dum, dum, dum);
+		calc_force(ni, nj, eps2, ipred, jpred, force_tmp, dum, dum, dum); //34*nj*ni*P
 		MPI_Allreduce(force_tmp, force, ni*Force::nword, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-		for(int i=0; i<ni; i++){
+		for(int i=0; i<ni; i++){									//11*ni flops *1
 
-			ptcl[i].init(time_cur, dt_min, dt_max, eta, force[i]);
-
-
-			// t_plus_dt[i] = ptcl[i].t + ptcl[i].dt;	
-			t_plus_dt[i].first = ptcl[i].t + ptcl[i].dt;	
+			ptcl[i].init(time_cur, dt_min, dt_max, eta, force[i]); 
+			t_plus_dt[i].first = ptcl[i].t + ptcl[i].dt;	 
 			t_plus_dt[i].second = i;
 			jptcl[i] = Jparticle(ptcl[i]);
 		}
-		// std::sort(t_plus_dt, t_plus_dt + ni, cmp_pair_second<int, double>());
 		std::sort(t_plus_dt, t_plus_dt + ni);
 	}
 
 	if(myRank == 0){
-		get_CPU_time(&CPU_time_real, &CPU_time_user, &CPU_time_syst);
+		get_CPU_time(&CPU_time_real, &CPU_time_user, &CPU_time_syst); //6 flops * 1
 		double Gflops = Particle::flops * 1.e-9 * Particle::init_iter * double(nbody) * nbody 
 			            / (CPU_time_real - CPU_time_real0);
 		fprintf(stdout, "Initialized, %f Gflops\n", Gflops);
 	}
 
-	energy(myRank);
+	energy(myRank); // 15 + 12*nbody flops * P
 
 	if(myRank == 0){
-		get_CPU_time(&CPU_time_real0, &CPU_time_user0, &CPU_time_syst0);
+		get_CPU_time(&CPU_time_real0, &CPU_time_user0, &CPU_time_syst0); //6 flops * 1
 	}
 
 	double t_scan = 0.0, t_pred = 0.0, t_jsend = 0.0, t_isend = 0.0, t_force = 0.0, t_recv = 0.0, t_comm = 0.0, t_corr = 0.0;
@@ -372,19 +352,13 @@ int main(int argc, char *argv[]){
 		}
 
 		double t1 = wtime();
-
-		//#pragma omp parallel for
-
 		for(int j=0; j<nj; j++){
-			// ptcl[j+jstart+1].prefetch();
 			jptcl[j+jstart+1].prefetch();
 		   	jpred[j] = Predictor(min_t, jptcl[j+jstart]);
 
 		}
 
 		int ni = n_act;
-
-		//#pragma omp parallel for
 		for(int i=0; i<ni; i++){
 			jptcl[active_list[i+1]].prefetch();
 			ipred[i] = Predictor(min_t, jptcl[active_list[i]]);
@@ -392,7 +366,7 @@ int main(int argc, char *argv[]){
 
 		double t2 = wtime();
 		double t3;
-		calc_force(ni, nj, eps2, ipred, jpred, force_tmp, t3, t_isend, t_recv);
+		calc_force(ni, nj, eps2, ipred, jpred, force_tmp, t3, t_isend, t_recv); //34*nj*ni*P
 		double t4 = wtime();
 		MPI_Allreduce(force_tmp, force, ni*Force::nword, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 		double t5 = wtime();
@@ -400,12 +374,10 @@ int main(int argc, char *argv[]){
 		//#pragma omp parallel for
 		for(int i=0; i<ni; i++){
 			ptcl[active_list[i+1]].prefetch();
-			// jptcl[active_list[i+1]].prefetch();
 			Particle &p = ptcl[active_list[i]];
 
 			p.correct(dt_min, dt_max, eta, force[i]);
 
-			// t_plus_dt[active_list[i]] = p.t + p.dt;
 			t_plus_dt[i].second = active_list[i];
 			t_plus_dt[i].first  = p.t + p.dt;
 
@@ -414,10 +386,9 @@ int main(int argc, char *argv[]){
 		}
 
 		double t6 = wtime();
-		// std::sort(t_plus_dt, t_plus_dt + ni, cmp_pair_second<int, double>());
 		std::sort(t_plus_dt, t_plus_dt + ni);
 		double t7 = wtime();
-		t_scan  += t1 - t0;
+		t_scan  += t1 - t0;            // 14 flops *p
 		t_pred  += t2 - t1;
 		t_jsend += t3 - t2;
 		t_force += t4 - t3;
@@ -426,12 +397,12 @@ int main(int argc, char *argv[]){
 		t_scan  += t7 - t6;
 
 		time_cur = min_t;
-		Timesteps += 1.0;
+		Timesteps += 1.0;		// 1 flop *p
 		n_act_sum += n_act;
 
 		if(time_cur >= t_contr){
-			energy(myRank);
-			t_contr += dt_contr;
+			energy(myRank); // 15 + 12*nbody flops * P
+			t_contr += dt_contr;	//1 flops *p
 		}
 		if(time_cur >= t_disk){
 			if(myRank == 0){
@@ -450,16 +421,12 @@ int main(int argc, char *argv[]){
 		printf("Timesteps = %.0f   Total sum of integrated part. = %.0f   n_act average = %.0f\n", 
 				Timesteps, n_act_sum, n_act_sum/Timesteps);
 		printf("\n");
-		// double Gflops  = 57.0e-9*nbody*n_act_sum/(CPU_time_user - CPU_time_user0);
-		// double GflopsT = 57.0e-9*nbody*g6_calls*48/(CPU_time_user - CPU_time_user0);
 		double Gflops  = Particle::flops*1.e-9*double(nbody)*double(n_act_sum)/(CPU_time_real - CPU_time_real0);
-		// double GflopsT = Particle::flops*1.e-9*nbody*g6_calls*48/(CPU_time_real - CPU_time_real0);
 		printf("Real Speed = %.3f GFlops \n", Gflops);
 
 	#ifdef PROFILE
 		double t_tot = t_scan + t_pred + t_jsend + t_force + t_comm + t_corr;
 		t_force -= t_isend + t_recv;
-		// printf("Time ratio: %10.2E%10.2E%10.2E%10.2E%10.2E\n", t_scan/t_tot, t_pred/t_tot, t_forc/t_tot, t_comm/t_tot, t_corr/t_tot);
 		printf("        sec_tot     usec/step   ratio\n"); 
 		printf("scan :%12.4E%12.4E%12.4E\n", t_scan, t_scan/Timesteps*1.e6, t_scan/t_tot);
 		printf("pred :%12.4E%12.4E%12.4E\n", t_pred, t_pred/Timesteps*1.e6, t_pred/t_tot);
@@ -470,8 +437,7 @@ int main(int argc, char *argv[]){
 		printf("comm :%12.4E%12.4E%12.4E\n", t_comm, t_comm/Timesteps*1.e6, t_comm/t_tot);
 		printf("corr :%12.4E%12.4E%12.4E\n", t_corr, t_corr/Timesteps*1.e6, t_corr/t_tot);
 		printf("tot  :%12.4E%12.4E%12.4E\n", t_tot, t_tot/Timesteps*1.e6, t_tot/t_tot);
-		// double t_comm_avr = t_comm / Timesteps * 1.e6;
-		// printf("Comm time : %10.2E usec\n", t_comm_avr);
+
 	#endif
     	fflush(stdout);
 	}
